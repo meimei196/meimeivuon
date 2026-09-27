@@ -96,6 +96,38 @@
         "createdAt": { "type": "number", "description": "Timestamp" }
       },
       "required": ["postId", "content", "createdAt"]
+    },
+    "UserAccount": {
+      "title": "User Account",
+      "description": "Registered user accounts for the website and garden",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "description": "Unique username" },
+        "password": { "type": "string", "description": "Account password" },
+        "nickname": { "type": "string", "description": "Display nickname" },
+        "avatarUrl": { "type": "string", "description": "Avatar image or GIF data URL" },
+        "frameId": { "type": "string", "description": "Avatar frame decoration ID" },
+        "isAdmin": { "type": "boolean", "description": "Whether account has admin privileges" },
+        "createdAt": { "type": "number", "description": "Account creation timestamp" },
+        "updatedAt": { "type": "number", "description": "Last update timestamp" }
+      },
+      "required": ["username", "nickname", "createdAt"]
+    },
+    "GardenRecord": {
+      "title": "Garden Record",
+      "description": "Cloud synchronized progress for MeiMei Garden and daily streak",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "description": "Username of the garden owner" },
+        "flowerData": { "type": "object", "description": "Daily rose watering, streak, and petals" },
+        "playerData": { "type": "object", "description": "Character gender and garden name" },
+        "starData": { "type": "object", "description": "Star-gazing collection" },
+        "shopData": { "type": "object", "description": "Purchased shop items and equipped accessories" },
+        "fishData": { "type": "object", "description": "Caught fish collection" },
+        "petData": { "type": "object", "description": "Adopted pets" },
+        "updatedAt": { "type": "number", "description": "Last synchronization timestamp" }
+      },
+      "required": ["username", "updatedAt"]
     }
   },
   "firestore": {
@@ -122,6 +154,14 @@
     "/forum_comments/{commentId}": {
       "schema": "ForumComment",
       "description": "Comments in forum tám zai"
+    },
+    "/user_accounts/{username}": {
+      "schema": "UserAccount",
+      "description": "Registered user accounts"
+    },
+    "/garden_records/{username}": {
+      "schema": "GardenRecord",
+      "description": "Garden progress and daily streaks"
     }
   }
 }

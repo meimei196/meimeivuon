@@ -8,11 +8,13 @@ import { BeginnerGuideModal } from './BeginnerGuideModal';
 import { DateIdeaWidget } from './DateIdeaWidget';
 import { FlowerBanner } from './FlowerBanner';
 import { HomeNoticeBanner } from './HomeNoticeBanner';
+import { HomeUserAvatarButton } from './HomeUserAvatarButton';
 import { motion, AnimatePresence } from 'motion/react';
 import { playCardClickSound, playFortuneClickSound } from '../lib/sound';
 import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useStore } from '../lib/store';
+import { getCurrentUser, subscribeAuth, AppUser } from '../lib/userAuth';
 
 export function Home({ 
   onSelectBot, 
@@ -39,6 +41,29 @@ export function Home({
   // Carousel State
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [direction, setDirection] = useState(0);
+
+  // User Auth & Avatar state
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(() => getCurrentUser());
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [requireLoginNotice, setRequireLoginNotice] = useState('');
+
+  useEffect(() => {
+    return subscribeAuth((u) => {
+      setCurrentUser(u);
+    });
+  }, []);
+
+  const handleGardenBannerClick = () => {
+    if (!currentUser) {
+      playFortuneClickSound();
+      setRequireLoginNotice('Nàng ơi, hãy đăng nhập để vào vườn Mộng Miên và duy trì chuỗi chăm hoa nhé ♡');
+      setIsLoginModalOpen(true);
+      return;
+    }
+    if (onOpenGarden) {
+      onOpenGarden();
+    }
+  };
 
   // Real-time synchronization of Bot Stats (Likes, Chats) from Firestore
   useEffect(() => {
@@ -252,6 +277,19 @@ export function Home({
             <ArrowLeft className="w-5 h-5 hover:-translate-x-0.5 transition-transform" />
           </button>
         )}
+
+        {/* Ô tròn Login Avatar ở góc phải tại Home */}
+        <HomeUserAvatarButton
+          currentUser={currentUser}
+          onUserChange={(u) => setCurrentUser(u)}
+          onOpenGarden={handleGardenBannerClick}
+          isLoginModalOpen={isLoginModalOpen}
+          requireLoginNotice={requireLoginNotice}
+          onCloseLoginModal={() => {
+            setIsLoginModalOpen(false);
+            setRequireLoginNotice('');
+          }}
+        />
 
         <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-zinc-100 serif-title mb-1 neon-title">
           <span className="relative inline-block">
@@ -663,7 +701,7 @@ export function Home({
       {!search && !activeTag && (
         <>
           <DateIdeaWidget />
-          <FlowerBanner onClick={onOpenGarden} />
+          <FlowerBanner onClick={handleGardenBannerClick} />
         </>
       )}
 

@@ -106,5 +106,17 @@ service cloud.firestore {
       allow create, update: if incoming().postId is string;
       allow delete: if true;
     }
+
+    match /user_accounts/{username} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
+    match /garden_records/{username} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
   }
 }

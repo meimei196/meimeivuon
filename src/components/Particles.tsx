@@ -49,6 +49,8 @@ export function Particles({ density = 'normal', className = '' }: ParticlesProps
 
   return (
     <div 
+      id="main-app-particles"
+      data-layer="main-falling-stars"
       className={`fixed inset-0 pointer-events-none overflow-hidden select-none z-[80] ${className}`} 
       aria-hidden="true"
     >

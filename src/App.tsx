@@ -15,6 +15,7 @@ import { MusicPlayer } from './components/MusicPlayer';
 import { Particles } from './components/Particles';
 import { HeartTrail } from './components/HeartTrail';
 import { bots } from './data/bots';
+import { getCurrentUser, subscribeAuth, AppUser } from './lib/userAuth';
 
 export default function App() {
   const getBotFromUrl = () => {
@@ -52,8 +53,15 @@ export default function App() {
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [isForumOpen, setIsForumOpen] = useState<boolean>(false);
   const [isGardenOpen, setIsGardenOpen] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(() => getCurrentUser());
   // Always show Grand Cổng on reload/fresh load
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    return subscribeAuth((u) => {
+      setCurrentUser(u);
+    });
+  }, []);
 
   useEffect(() => {
     // Clean URL to root on reload so entering the gate always lands on Home
@@ -166,7 +174,7 @@ export default function App() {
             </motion.div>
           ) : isGardenOpen ? (
             <motion.div key="garden" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} className="h-full w-full">
-              <MeiMeiGarden onBack={handleBackToHome} />
+              <MeiMeiGarden onBack={handleBackToHome} currentUser={currentUser} />
             </motion.div>
           ) : (
             <motion.div key="home" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full overflow-y-auto w-full">
@@ -181,7 +189,8 @@ export default function App() {
         </AnimatePresence>
       </div>
 
-      <Particles density="normal" className="z-[80]" />
+      {/* Lớp sao rơi của web chính - Tự động ẩn khi vào route vườn meimeigarden và khôi phục khi về trang chủ */}
+      {!isGardenOpen && <Particles density="normal" className="z-[80]" />}
       {!selectedBotId && !isForumOpen && !isGardenOpen && <RandomHusbandWidget onSelectBot={handleSelectBot} />}
       <MusicPlayer />
       <HeartTrail />

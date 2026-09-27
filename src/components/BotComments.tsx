@@ -34,6 +34,7 @@ import { db, auth } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { playFortuneClickSound } from '../lib/sound';
 import { ADMIN_FRAMES, AvatarWithFrame } from './AvatarFrame';
+import { getCurrentUser, subscribeAuth, DEFAULT_ADMIN_AVATAR } from '../lib/userAuth';
 
 const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1530072747177414779/dMR0IXkoakW3bgaZ1vVSK1nCJS8xTw4PrcYoBF1YKqsQYJnSLwF1aK1HeJKX8K8kP0ei";
 
@@ -153,22 +154,19 @@ const DECOR_AVATARS = [
   'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
 ];
 
-const DEFAULT_ADMIN_AVATAR = 'https://i.pinimg.com/736x/9c/22/0f/9c220f853800c55d195ed122379f4d9d.jpg';
-
 export function BotComments({ botId, botName }: { botId: string; botName: string }) {
   const [allComments, setAllComments] = useState<BotComment[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Persistent Admin State (Mật Thất)
+  // Persistent Admin State synced with Auth
   const [isAdmin, setIsAdmin] = useState(() => {
-    try {
-      return localStorage.getItem('mei_is_admin') === 'true';
-    } catch {
-      return false;
-    }
+    const user = getCurrentUser();
+    return Boolean(user?.isAdmin);
   });
 
   const [adminAvatar, setAdminAvatar] = useState(() => {
+    const user = getCurrentUser();
+    if (user?.isAdmin && user.avatarUrl) return user.avatarUrl;
     try {
       return localStorage.getItem('mei_admin_avatar') || DEFAULT_ADMIN_AVATAR;
     } catch {
@@ -177,6 +175,8 @@ export function BotComments({ botId, botName }: { botId: string; botName: string
   });
 
   const [adminFrame, setAdminFrame] = useState(() => {
+    const user = getCurrentUser();
+    if (user?.isAdmin && user.frameId) return user.frameId;
     try {
       return localStorage.getItem('mei_admin_frame') || 'frame-crown-rose';
     } catch {
@@ -184,25 +184,30 @@ export function BotComments({ botId, botName }: { botId: string; botName: string
     }
   });
 
-  // Secret Modal State
-  const [isSecretModalOpen, setIsSecretModalOpen] = useState(false);
-  const [secretPassInput, setSecretPassInput] = useState('');
-  const [secretError, setSecretError] = useState('');
-  const [newAvatarInput, setNewAvatarInput] = useState('');
-  const avatarUploadRef = useRef<HTMLInputElement>(null);
-
-  // Secret click counter on header
-  const clickCountRef = useRef(0);
-  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
-
   // Persistent anonymous nickname
   const [nickname, setNickname] = useState(() => {
-    try {
-      return localStorage.getItem('mei_comment_nickname') || '';
-    } catch {
-      return '';
-    }
+    const user = getCurrentUser();
+    return user ? user.nickname : '';
   });
+
+  useEffect(() => {
+    const unsub = subscribeAuth((user) => {
+      if (user) {
+        setIsAdmin(Boolean(user.isAdmin));
+        setNickname(user.nickname);
+        if (user.isAdmin) {
+          setAdminAvatar(user.avatarUrl || DEFAULT_ADMIN_AVATAR);
+          setAdminFrame(user.frameId || 'frame-crown-rose');
+        }
+      } else {
+        setIsAdmin(false);
+        setNickname('');
+        setAdminAvatar(DEFAULT_ADMIN_AVATAR);
+        setAdminFrame('frame-crown-rose');
+      }
+    });
+    return unsub;
+  }, []);
 
   // Top-level comment input state
   const [content, setContent] = useState('');
@@ -232,132 +237,6 @@ export function BotComments({ botId, botName }: { botId: string; botName: string
       localStorage.setItem('mei_comment_nickname', val);
     } catch {
       // ignore
-    }
-  };
-
-  // 5-Clicks trigger to open Secret Admin Modal
-  const handleSecretClick = () => {
-    clickCountRef.current += 1;
-    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
-
-    if (clickCountRef.current >= 5) {
-      clickCountRef.current = 0;
-      playFortuneClickSound();
-      setIsSecretModalOpen(true);
-      setSecretError('');
-      setSecretPassInput('');
-    } else {
-      clickTimerRef.current = setTimeout(() => {
-        clickCountRef.current = 0;
-      }, 2500);
-    }
-  };
-
-  const handleAdminLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (secretPassInput.trim() === 'meimei196') {
-      setIsAdmin(true);
-      localStorage.setItem('mei_is_admin', 'true');
-      setNickname('giáo chủ hội zơm👑');
-      localStorage.setItem('mei_comment_nickname', 'giáo chủ hội zơm👑');
-      setSecretPassInput('');
-      setSecretError('');
-      playFortuneClickSound();
-    } else {
-      setSecretError('Mật mã mật thất không đúng rồi nàng ơi!');
-    }
-  };
-
-  const handleAdminLogout = () => {
-    setIsAdmin(false);
-    localStorage.removeItem('mei_is_admin');
-    setNickname('');
-    localStorage.removeItem('mei_comment_nickname');
-    setIsSecretModalOpen(false);
-  };
-
-  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      // If user uploads an animated GIF, preserve original GIF data URL so animation plays!
-      if (file.type === 'image/gif') {
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const gifDataUrl = reader.result as string;
-          setAdminAvatar(gifDataUrl);
-          localStorage.setItem('mei_admin_avatar', gifDataUrl);
-          playFortuneClickSound();
-
-          try {
-            await setDoc(doc(db, 'user_profiles', 'admin_meimei'), {
-              username: 'giáo chủ hội zơm👑',
-              avatarUrl: gifDataUrl,
-              frameId: adminFrame,
-              updatedAt: Date.now()
-            }, { merge: true });
-          } catch (fireErr) {
-            console.warn('Persist admin avatar to Firestore error:', fireErr);
-          }
-        };
-        reader.readAsDataURL(file);
-      } else {
-        const compressed = await compressImage(file, 400, 0.8);
-        setAdminAvatar(compressed);
-        localStorage.setItem('mei_admin_avatar', compressed);
-        playFortuneClickSound();
-
-        try {
-          await setDoc(doc(db, 'user_profiles', 'admin_meimei'), {
-            username: 'giáo chủ hội zơm👑',
-            avatarUrl: compressed,
-            frameId: adminFrame,
-            updatedAt: Date.now()
-          }, { merge: true });
-        } catch (fireErr) {
-          console.warn('Persist admin avatar to Firestore error:', fireErr);
-        }
-      }
-    } catch (err) {
-      console.warn('Lỗi nén avatar:', err);
-    }
-  };
-
-  const handleSelectAdminFrame = async (frameId: string) => {
-    setAdminFrame(frameId);
-    localStorage.setItem('mei_admin_frame', frameId);
-    playFortuneClickSound();
-
-    try {
-      await setDoc(doc(db, 'user_profiles', 'admin_meimei'), {
-        username: 'giáo chủ hội zơm👑',
-        avatarUrl: adminAvatar,
-        frameId: frameId,
-        updatedAt: Date.now()
-      }, { merge: true });
-    } catch (fireErr) {
-      console.warn('Persist admin frame to Firestore error:', fireErr);
-    }
-  };
-
-  const handleSaveAvatarUrl = async () => {
-    if (newAvatarInput.trim()) {
-      const url = newAvatarInput.trim();
-      setAdminAvatar(url);
-      localStorage.setItem('mei_admin_avatar', url);
-      setNewAvatarInput('');
-      playFortuneClickSound();
-
-      try {
-        await setDoc(doc(db, 'user_profiles', 'admin_meimei'), {
-          username: 'giáo chủ hội zơm👑',
-          avatarUrl: url,
-          frameId: adminFrame,
-          updatedAt: Date.now()
-        }, { merge: true });
-      } catch (fireErr) {
-        console.warn('Persist admin avatar url to Firestore error:', fireErr);
-      }
     }
   };
 
@@ -696,17 +575,14 @@ export function BotComments({ botId, botName }: { botId: string; botName: string
         <div className="flex items-center justify-between gap-3 mb-2">
           <div className="flex items-center gap-2.5">
             <div 
-              onClick={handleSecretClick}
-              className="w-8 h-8 rounded-full bg-pink-500/20 border border-pink-500/30 flex items-center justify-center text-pink-300 cursor-pointer select-none active:scale-95 transition-transform"
+              className="w-8 h-8 rounded-full bg-pink-500/20 border border-pink-500/30 flex items-center justify-center text-pink-300 select-none"
               title="Góc tâm tình"
             >
               {isAdmin ? <Crown className="w-4 h-4 text-pink-300 animate-pulse" /> : <MessageCircle className="w-4 h-4" />}
             </div>
             <div>
-              {/* Click 5 times here to open Mật Thất */}
               <h3 
-                onClick={handleSecretClick}
-                className="text-base sm:text-lg font-bold text-zinc-100 serif-title flex items-center gap-2 cursor-pointer select-none"
+                className="text-base sm:text-lg font-bold text-zinc-100 serif-title flex items-center gap-2 select-none"
               >
                 <span>Bình luận ẩn danh</span>
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/10 text-pink-300 font-sans font-semibold border border-white/10">
@@ -1360,158 +1236,6 @@ export function BotComments({ botId, botName }: { botId: string; botName: string
                 </div>
               )}
             </div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Secret Admin Modal (Mật Thất Của Giáo Chủ) */}
-      <AnimatePresence>
-        {isSecretModalOpen && (
-          <div 
-            onClick={() => setIsSecretModalOpen(false)}
-            className="fixed inset-0 z-[4000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200"
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="max-w-sm w-full bg-zinc-950/95 border-2 border-pink-300 shadow-[0_0_35px_rgba(244,114,182,0.55),0_0_12px_rgba(251,207,232,0.35)] rounded-3xl p-6 relative overflow-hidden"
-            >
-              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-pink-400 via-rose-300 to-pink-400" />
-              
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">👑</span>
-                  <h3 className="text-base font-bold text-pink-200 serif-title">
-                    Mật Thất Giáo Chủ Hội Zơm 𝜗ৎ
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsSecretModalOpen(false)}
-                  className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white flex items-center justify-center cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {!isAdmin ? (
-                /* Login Form */
-                <form onSubmit={handleAdminLogin} className="space-y-4">
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Nàng đã mở được mật thất bí mật! Vui lòng nhập mật mã của Giáo Chủ để mở khóa toàn quyền:
-                  </p>
-                  
-                  <div className="relative">
-                    <input
-                      type="password"
-                      value={secretPassInput}
-                      onChange={(e) => setSecretPassInput(e.target.value)}
-                      placeholder="Nhập mật mã giáo chủ..."
-                      autoFocus
-                      className="w-full px-4 py-2.5 rounded-xl bg-black/70 border border-white/15 text-zinc-200 text-xs focus:outline-none focus:border-pink-300"
-                    />
-                    <KeyRound className="w-4 h-4 text-zinc-500 absolute right-3 top-3" />
-                  </div>
-
-                  {secretError && (
-                    <p className="text-xs text-rose-400 font-medium">{secretError}</p>
-                  )}
-
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-400 hover:to-rose-400 text-white font-bold text-xs shadow-[0_0_15px_rgba(244,114,182,0.4)] transition-all active:scale-95 cursor-pointer"
-                  >
-                    Xác nhận Giáo Chủ
-                  </button>
-                </form>
-              ) : (
-                /* Logged In Admin Panel */
-                <div className="space-y-4">
-                  {/* Centered Circular Avatar - Click to change directly with chosen Frame */}
-                  <div className="flex flex-col items-center justify-center pt-1 pb-1 select-none">
-                    <input
-                      ref={avatarUploadRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarFileChange}
-                      className="hidden"
-                    />
-                    <div 
-                      onClick={() => avatarUploadRef.current?.click()}
-                      className="relative group cursor-pointer"
-                      title="Chạm vào avatar để đổi ảnh đại diện (ảnh hoặc GIF động)"
-                    >
-                      <AvatarWithFrame
-                        avatarUrl={adminAvatar}
-                        frameId={adminFrame}
-                        size="xl"
-                        showDecor={true}
-                      />
-                      <div className="absolute inset-0 rounded-full bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[11px] font-sans font-medium transition-opacity z-30">
-                        <span>Đổi ảnh</span>
-                      </div>
-                    </div>
-
-                    <span className="text-sm font-bold text-pink-200 mt-2 font-serif neon-twinkle-admin tracking-wide">
-                      giáo chủ hội zơm👑
-                    </span>
-                    <p className="text-[10.5px] text-zinc-400 mt-1">Chạm vào avatar để đổi ảnh hoặc GIF động 𝜗ৎ</p>
-                  </div>
-
-                  {/* Frame Decor Selector (8 Frame Options) */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-zinc-200">
-                      <span className="flex items-center gap-1 text-pink-300">
-                        <span>🎀</span>
-                        <span>Khung Avatar Decor</span>
-                      </span>
-                      <span className="text-[10px] text-pink-300 font-normal">Chạm để chọn frame</span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar p-1">
-                      {ADMIN_FRAMES.map((f) => (
-                        <button
-                          key={f.id}
-                          type="button"
-                          onClick={() => handleSelectAdminFrame(f.id)}
-                          className={`p-2 rounded-xl border text-left flex items-center gap-2 transition-all cursor-pointer select-none active:scale-95 ${
-                            adminFrame === f.id
-                              ? 'bg-pink-500/25 border-pink-300 text-pink-200 shadow-[0_0_12px_rgba(244,114,182,0.45)]'
-                              : 'bg-black/50 border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-pink-400/30'
-                          }`}
-                        >
-                          <span className="text-lg shrink-0">{f.decorTop || '✨'}</span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[10.5px] font-bold truncate leading-tight">{f.name}</p>
-                            <p className="text-[8.5px] text-zinc-400 truncate">{f.badge}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="pt-3 flex items-center justify-between border-t border-white/10">
-                    <button
-                      type="button"
-                      onClick={handleAdminLogout}
-                      className="text-xs text-rose-400 hover:text-rose-300 font-medium cursor-pointer"
-                    >
-                      Thoát quyền Admin
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsSecretModalOpen(false)}
-                      className="px-5 py-1.5 rounded-xl bg-pink-500 hover:bg-pink-400 text-white text-xs font-bold shadow-md active:scale-95 cursor-pointer"
-                    >
-                      Xong 𝜗ৎ
-                    </button>
-                  </div>
-                </div>
-              )}
-            </motion.div>
           </div>
         )}
       </AnimatePresence>

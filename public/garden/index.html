@@ -5,11 +5,28 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#17221d">
   <title>Mộng Miên · thử đường đi trên ảnh gốc</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400;1,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main class="stage" id="stage" aria-label="Bản thử đường đi an toàn trong vườn Mộng Miên">
+  <div class="stage-viewport" id="stageViewport">
+    <div class="stage-extension stage-extension-top" id="stageExtensionTop" aria-hidden="true">
+      <div class="sky-layer sky-layer-night"></div>
+      <div class="sky-layer sky-layer-day"></div>
+      <div class="celestial-body sky-moon" id="skyMoon"></div>
+      <div class="celestial-body sky-sun" id="skySun"></div>
+    </div>
+    <main class="stage" id="stage" aria-label="Bản thử đường đi an toàn trong vườn Mộng Miên">
+    <!-- Tiêu đề Vườn ở khoảng trống phía trên cảnh vườn -->
+    <div class="garden-scene-title" id="gardenSceneTitle" aria-label="Tên khu vườn">
+      <span class="scene-title-sparkle left" aria-hidden="true">✧</span>
+      <span class="scene-title-text" id="gardenSceneTitleText">Vườn Mộng Miên</span>
+      <span class="scene-title-sparkle right" aria-hidden="true">✧</span>
+    </div>
     <img class="garden" src="assets/original-dark-romance-garden.webp" alt="Ảnh vườn dark romance gốc được chọn">
+    <div class="moon-cover" id="moonCover" aria-hidden="true"></div>
     <div class="day-sky" aria-hidden="true"></div>
     <img class="lake-loop" src="assets/lake-loop.webp" alt="" aria-hidden="true">
     <canvas class="lake-canvas" id="lakeCanvas" width="454" height="520" aria-hidden="true"></canvas>
@@ -93,7 +110,27 @@
     <div class="garden-hud" aria-label="Giờ và thời tiết trong vườn">
       <div class="clock-group"><div class="clock-meta"><span class="garden-day" id="gardenDayChip">Ngày 1</span><button class="weather-now" id="weatherNow" type="button" aria-label="Xem thời tiết"><span id="weatherIcon" aria-hidden="true">☀</span><span id="weatherName">Nắng</span></button></div><div class="garden-clock" id="gardenClock" role="timer" aria-label="Đồng hồ trong vườn"><i class="hour-hand" id="hourHand"></i><i class="minute-hand" id="minuteHand"></i><i class="clock-pin"></i><span id="clockTime">--:--</span></div></div>
     </div>
-    <div class="weather-choices" id="weatherChoices" hidden aria-label="Xem thử thời tiết"><button type="button" data-weather-choice="auto">Tự động</button><button type="button" data-weather-choice="sunny">☀</button><button type="button" data-weather-choice="cloudy">☁</button><button type="button" data-weather-choice="windy">❧</button><button type="button" data-weather-choice="rainy">☂</button><button type="button" data-weather-choice="snowy">❄</button></div>
+    <div class="weather-choices" id="weatherChoices" hidden aria-label="Xem thử thời tiết và thời gian">
+      <div class="weather-panel-section">
+        <div class="weather-panel-title">Thời tiết</div>
+        <div class="weather-btn-group">
+          <button type="button" data-weather-choice="auto" aria-pressed="true" title="Tự động theo lịch vườn">Tự động</button>
+          <button type="button" data-weather-choice="sunny" title="Trời nắng, quang mây">☀ Nắng</button>
+          <button type="button" data-weather-choice="cloudy" title="Nhiều mây">☁ Mây</button>
+          <button type="button" data-weather-choice="windy" title="Gió thổi cánh hoa">❧ Gió</button>
+          <button type="button" data-weather-choice="rainy" title="Mưa rơi trên hồ">☂ Mưa</button>
+          <button type="button" data-weather-choice="snowy" title="Tuyết rơi nhẹ">❄ Tuyết</button>
+        </div>
+      </div>
+      <div class="weather-panel-section">
+        <div class="weather-panel-title">Thời gian (Xem thử)</div>
+        <div class="weather-btn-group time-btn-group">
+          <button type="button" data-time-choice="auto" aria-pressed="true" title="Theo giờ thực tế Việt Nam">Giờ VN</button>
+          <button type="button" data-time-choice="day" title="Xem thử ban ngày">☀ Ngày</button>
+          <button type="button" data-time-choice="night" title="Xem thử ban đêm">☾ Đêm</button>
+        </div>
+      </div>
+    </div>
 
     <header class="toolbar">
       <button id="debugToggle" type="button" aria-pressed="false">Hiện kỹ thuật</button>
@@ -101,7 +138,10 @@
     </header>
 
     <div class="status" id="status" hidden aria-hidden="true"></div>
-    <button class="shop-toggle" id="shopToggle" type="button" aria-label="Mở tiệm nhỏ trong vườn"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 12h18l-1.5 16h-15L7 12Zm5 1V9a4 4 0 0 1 8 0v4M5 12h22"/><path d="M16 17c2-2 5 1 0 5-5-4-2-7 0-5Z"/></svg><span>Tiệm nhỏ</span></button>
+    <div class="garden-quick-actions">
+      <button class="bag-toggle" id="bagToggle" type="button" aria-label="Mở túi đồ"><img src="assets/satchel.webp" alt=""></button>
+      <button class="shop-toggle" id="shopToggle" type="button" aria-label="Mở tiệm nhỏ"><img src="assets/shopfront.webp" alt=""><span>Tiệm nhỏ</span></button>
+    </div>
     <div class="portrait-dock" id="portraitDock" hidden><button class="portrait-button" id="emotionToggle" type="button" aria-label="Chọn biểu cảm nhân vật" aria-expanded="false"><span class="dock-art" id="dockArt" aria-hidden="true"></span><span class="portrait-hint" aria-hidden="true">✧</span></button><div class="emotion-menu" id="emotionMenu" hidden><button type="button" data-expression="happy">✦ <span>Vui</span></button><button type="button" data-expression="shy">♡ <span>Ngại</span></button><button type="button" data-expression="sad">☁ <span>Buồn</span></button><button type="button" data-expression="annoyed">✕ <span>Giận</span></button></div></div>
 
     <section class="onboard-veil" id="onboardVeil" aria-hidden="true">
@@ -124,6 +164,15 @@
         <div class="shop-tabs" id="shopTabs" role="tablist" aria-label="Nhóm đồ trong tiệm"><button type="button" data-shop-tab="profile" role="tab" aria-selected="true">Nhân vật</button><button type="button" data-shop-tab="lake" role="tab" aria-selected="false">Hồ cá</button><button type="button" data-shop-tab="pet" role="tab" aria-selected="false">Pet</button><button type="button" data-shop-tab="frame" role="tab" aria-selected="false">Khung</button></div>
         <div class="shop-list" id="shopList"></div>
         <p class="shop-notice" id="shopNotice" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section class="bag-veil" id="bagVeil" aria-hidden="true">
+      <div class="bag-sheet" role="dialog" aria-modal="true" aria-labelledby="bagTitle" tabindex="-1">
+        <button class="bag-close" id="bagClose" type="button" aria-label="Đóng túi đồ">×</button>
+        <div class="bag-heading"><span>✧ NHỮNG THỨ EM MANG THEO ✧</span><h2 id="bagTitle">Túi đồ <em>trong vườn.</em></h2><p id="bagSummary"></p></div>
+        <div class="bag-list" id="bagList"></div>
+        <p class="bag-notice" id="bagNotice" role="status" aria-live="polite"></p>
       </div>
     </section>
 
@@ -229,6 +278,8 @@
       </div>
     </section>
   </main>
+    <div class="stage-extension stage-extension-bottom" aria-hidden="true"></div>
+  </div>
   <script src="game.js"></script>
 </body>
 </html>

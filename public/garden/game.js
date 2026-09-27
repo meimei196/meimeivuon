@@ -5,9 +5,23 @@
   const bloomWater=document.getElementById('bloomWater'),bloomClose=document.getElementById('bloomClose');
   const bloomRose=document.getElementById('bloomRose');
   // Clean release state: each new account starts with no materials or pets.
-  const account=window.MONG_ACCOUNT||{};
-  const accountId=String(account.id||window.MONG_ACCOUNT_ID||'local-preview');
-  const accountName=String(account.name||window.MONG_ACCOUNT_NAME||'bạn');
+  const _urlParams=new URLSearchParams(window.location.search);
+  const _accQuery=_urlParams.get('account'),_nameQuery=_urlParams.get('name');
+  const account=window.MONG_ACCOUNT||(_accQuery?{id:_accQuery,name:_nameQuery||_accQuery}:{});
+  const accountId=String(account.id||window.MONG_ACCOUNT_ID||_accQuery||'local-preview');
+  const accountName=String(account.name||window.MONG_ACCOUNT_NAME||_nameQuery||'bạn');
+  function notifyParentSync(subKey,data){
+    try{
+      if(window.parent&&window.parent!==window){
+        window.parent.postMessage({
+          type:'GARDEN_SYNC_DATA',
+          accountId,
+          subKey,
+          data
+        },'*');
+      }
+    }catch(_err){}
+  }
   const flowerStorageKey='mong-mien-garden:release:v1:flower:'+accountId;
   let flowerMemory={last:'',streak:0,petals:0},focusBeforeBloom=null,bloomTimers=[],audioContext=null;
   function clearBloomTimers(){bloomTimers.forEach(clearTimeout);bloomTimers=[];}
@@ -68,8 +82,17 @@
   const spriteUrl=(gender,kind)=>window.MONG_CHAR_ASSETS?.[gender]?.[kind]||'assets/characters/'+gender+'-'+kind+(kind==='walk'?'-v2':'')+'.webp';
   function renderOnboardSprites(){document.querySelectorAll('.onboard-sprite').forEach(el=>{const h=el.getBoundingClientRect().height,w=el.getBoundingClientRect().width;el.style.backgroundImage='url("'+spriteUrl(el.classList.contains('male')?'male':'female','idle')+'")';el.style.backgroundSize='auto 100%';el.style.backgroundPosition=((w-h)/2)+'px 0';});}
   let player=null,expression='',expressionUntil=0,expressionTimer=null,walkTimer=null,walkFrame=0,activeAction='',interactionBusy=false,dialogueTimer=null,dialogueCollapse=null;
+  function updateGardenSceneTitle(name){
+    const titleEl=document.getElementById('gardenSceneTitleText');
+    if(!titleEl)return;
+    let raw=(name||player?.gardenName||'Mộng Miên').trim();
+    if(!/^vườn\s+/i.test(raw)){
+      raw='Vườn '+raw;
+    }
+    titleEl.textContent=raw;
+  }
   function readPlayer(){try{const value=JSON.parse(localStorage.getItem(playerStorageKey));if(value&&(value.gender==='female'||value.gender==='male')&&typeof value.gardenName==='string'&&value.gardenName.trim())return value;}catch(_error){}return null;}
-  function savePlayer(value){player=value;try{localStorage.setItem(playerStorageKey,JSON.stringify(value));}catch(_error){}}
+  function savePlayer(value){player=value;try{localStorage.setItem(playerStorageKey,JSON.stringify(value));}catch(_error){}updateGardenSceneTitle(value?.gardenName);notifyParentSync('player',value);}
   function spriteFrame(kind,frame){
     const gender=player?.gender||'female',columns=spriteColumns[kind];
     const height=actor.getBoundingClientRect().height||52,width=actor.getBoundingClientRect().width||39;
@@ -141,14 +164,19 @@
   });
   document.getElementById('emotionToggle').addEventListener('click',e=>{e.stopPropagation();const menu=document.getElementById('emotionMenu');menu.hidden=!menu.hidden;e.currentTarget.setAttribute('aria-expanded',String(!menu.hidden));playSound();});
   document.getElementById('emotionMenu').addEventListener('click',e=>{e.stopPropagation();const button=e.target.closest('[data-expression]');if(button)setExpression(button.dataset.expression);});
-  const weatherMeta={sunny:['☀','Nắng'],cloudy:['☁','Nhiều mây'],windy:['❧','Gió'],rainy:['☂','Mưa'],snowy:['❄','Tuyết']};
+  const weatherMeta={sunny:['☀','Trời quang'],cloudy:['☁','Nhiều mây'],windy:['❧','Gió'],rainy:['☂','Mưa'],snowy:['❄','Tuyết']};
   const weatherCanvas=document.getElementById('weatherCanvas'),weatherCtx=weatherCanvas.getContext('2d');
-  let weatherChoice='auto',weatherNow='',particles=[],lastWeatherFrame=0;
+  let weatherChoice='auto',timeChoice='',weatherNow='',particles=[],lastWeatherFrame=0;
   const vnParts=()=>{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());return Object.fromEntries(parts.map(p=>[p.type,p.value]));};
   function scheduledWeather(parts){const slot=Math.floor(Number(parts.hour)/3),seed=Number(parts.year)*37+Number(parts.month)*23+Number(parts.day)*71+slot*13;return ['sunny','cloudy','windy','sunny','rainy','cloudy','sunny','snowy','windy','cloudy'][seed%10];}
   function updateEnvironment(){
-    const p=vnParts(),hour=Number(p.hour),minute=Number(p.minute),part=hour<6||hour>=19?'night':hour<8?'dawn':hour<17?'day':'dusk';
+    const p=vnParts(),hour=Number(p.hour),minute=Number(p.minute);
+    const naturalPart=hour<6||hour>=19?'night':hour<8?'dawn':hour<17?'day':'dusk';
+    const part=timeChoice||naturalPart;
     stage.dataset.daypart=part;
+    const viewport=document.getElementById('stageViewport');
+    if(viewport)viewport.dataset.daypart=part;
+    document.body.dataset.daypart=part;
     document.getElementById('hourHand').style.transform='translateX(-50%) rotate('+((hour%12)*30+minute*.5)+'deg)';
     document.getElementById('minuteHand').style.transform='translateX(-50%) rotate('+(minute*6)+'deg)';
     document.getElementById('clockTime').textContent=p.hour+':'+p.minute;
@@ -200,7 +228,30 @@
     requestAnimationFrame(drawWeather);
   }
   document.getElementById('weatherNow').addEventListener('click',e=>{e.stopPropagation();const panel=document.getElementById('weatherChoices');panel.hidden=!panel.hidden;playSound();});
-  document.getElementById('weatherChoices').addEventListener('click',e=>{e.stopPropagation();const b=e.target.closest('[data-weather-choice]');if(!b)return;weatherChoice=b.dataset.weatherChoice;document.querySelectorAll('[data-weather-choice]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));updateEnvironment();document.getElementById('weatherChoices').hidden=true;playSound('open');});
+  document.getElementById('weatherChoices').addEventListener('click',e=>{
+    e.stopPropagation();
+    const tb=e.target.closest('[data-time-choice]');
+    if(tb){
+      const val=tb.dataset.timeChoice;
+      timeChoice=val==='auto'?'':val;
+      document.querySelectorAll('[data-time-choice]').forEach(x=>x.setAttribute('aria-pressed',String(x===tb)));
+      updateEnvironment();
+      playSound('open');
+      return;
+    }
+    const b=e.target.closest('[data-weather-choice]');
+    if(!b)return;
+    weatherChoice=b.dataset.weatherChoice;
+    document.querySelectorAll('[data-weather-choice]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+    updateEnvironment();
+    playSound('open');
+  });
+  document.addEventListener('click',e=>{
+    const p=document.getElementById('weatherChoices');
+    if(p&&!p.hidden&&!e.target.closest('#weatherChoices')&&!e.target.closest('#weatherNow')){
+      p.hidden=true;
+    }
+  });
   function animateRose(){
     clearBloomTimers();roseFrame(0);
     [1,2,3].forEach((frame,i)=>bloomTimers.push(setTimeout(()=>roseFrame(frame),260+i*330)));
@@ -222,6 +273,7 @@
   function saveFlower(value){
     flowerMemory=value;
     try{localStorage.setItem(flowerStorageKey,JSON.stringify(value));}catch(_error){}
+    notifyParentSync('flower',value);
   }
   const starVeil=document.getElementById('starVeil'),starSheet=starVeil.querySelector('.star-sheet');
   const starWatch=document.getElementById('starWatch'),starClose=document.getElementById('starClose');
@@ -280,6 +332,7 @@
   function saveStars(state){
     starMemory=state;
     try{localStorage.setItem(starStorageKey,JSON.stringify(state));}catch(_error){}
+    notifyParentSync('stars',state);
   }
   function drawConstellation(index){
     const points=constellations[index].dots;
@@ -372,8 +425,46 @@
     try{const saved=JSON.parse(localStorage.getItem(shopStorageKey));if(saved&&typeof saved==='object')return {rod:!!saved.rod,pate:Number.isSafeInteger(saved.pate)&&saved.pate>=0?saved.pate:0,toy:!!saved.toy,frames:Array.isArray(saved.frames)?saved.frames.filter(x=>x==='rose'||x==='moon'):[],equipped:['plain','rose','moon'].includes(saved.equipped)?saved.equipped:'plain'};}catch(_error){}
     return shopMemory;
   }
-  function saveShop(state){shopMemory=state;try{localStorage.setItem(shopStorageKey,JSON.stringify(state));}catch(_error){}applyShopFrame();}
+  function saveShop(state){shopMemory=state;try{localStorage.setItem(shopStorageKey,JSON.stringify(state));}catch(_error){}applyShopFrame();notifyParentSync('shop',state);}
   function applyShopFrame(){const frame=shopState().equipped;portraitDock.classList.toggle('frame-rose',frame==='rose');portraitDock.classList.toggle('frame-moon',frame==='moon');}
+  const bagVeil=document.getElementById('bagVeil'),bagList=document.getElementById('bagList');
+  let bagFocus=null,pendingBagStation='';
+  function renderBag(){
+    const goods=shopState(),fish=fishState(),flowers=flowerState();
+    document.getElementById('bagSummary').textContent=flowers.petals+' ✿ cánh hoa · '+fishTotal(fish)+' cá';
+    const item=(picture,name,detail,action='',label='')=>'<article class="bag-item"><img src="assets/'+picture+'.webp" alt=""><span><strong>'+name+'</strong><small>'+detail+'</small></span>'+(action?'<button type="button" data-bag-use="'+action+'">'+label+'</button>':'')+'</article>';
+    const rows=[];
+    if(goods.rod)rows.push(item('moon-rod','Cần câu ánh trăng','Đang trang bị · tăng cơ hội gặp cá hiếm','lake','Đến hồ'));
+    if(goods.pate)rows.push(item('pate-tin','Pate cá thơm','Còn '+goods.pate+' phần · dùng ở bát ăn','feed','Cho bé ăn'));
+    if(goods.toy)rows.push(item('violet-yarn','Bóng len tím','Dùng ở góc đồ chơi · không tiêu hao','play','Chơi với bé'));
+    if(goods.equipped!=='plain')rows.push('<article class="bag-item"><span class="bag-plain-art" aria-hidden="true">◇</span><span><strong>Khung nguyên bản</strong><small>Đổi về viền avatar ban đầu</small></span><button type="button" data-bag-use="plain">Trang bị</button></article>');
+    for(const frame of goods.frames){
+      const rose=frame==='rose';
+      rows.push(item(rose?'rose-frame':'moon-frame',rose?'Viền hồng sương':'Viền ánh trăng',goods.equipped===frame?'Đang dùng trên avatar':'Khung avatar đã sở hữu',frame,'Trang bị'));
+    }
+    for(const kind of fishKinds){
+      const count=fish.counts[kind.id]||0;
+      if(count)rows.push('<article class="bag-item"><i class="fish-mini fish-'+kind.id+'" aria-hidden="true"></i><span><strong>'+kind.name+'</strong><small>×'+count+' · dùng ở bát ăn</small></span><button type="button" data-bag-use="feed">Cho bé ăn</button></article>');
+    }
+    if(fish.seaweed)rows.push('<article class="bag-item"><img src="assets/pond-weed.webp" alt=""><span><strong>Rong</strong><small>×'+fish.seaweed+' · bán ở hồ</small></span><button type="button" data-bag-use="lake">Đến hồ</button></article>');
+    bagList.innerHTML=rows.length?rows.join(''):'<p class="bag-empty">Túi đang trống. Ghé tiệm nhỏ hoặc thử thả câu nhé ✧</p>';
+  }
+  function openBag(){bagFocus=document.activeElement;renderBag();document.getElementById('bagNotice').textContent='';bagVeil.classList.add('open');bagVeil.setAttribute('aria-hidden','false');bagVeil.querySelector('.bag-sheet').focus({preventScroll:true});playSound('open');}
+  function closeBag(){bagVeil.classList.remove('open');bagVeil.setAttribute('aria-hidden','true');if(bagFocus&&document.contains(bagFocus))bagFocus.focus({preventScroll:true});}
+  document.getElementById('bagToggle').addEventListener('click',e=>{e.stopPropagation();openBag();});
+  document.getElementById('bagClose').addEventListener('click',()=>{closeBag();playSound();});
+  bagVeil.addEventListener('click',e=>{e.stopPropagation();if(e.target===bagVeil)closeBag();});
+  bagVeil.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();closeBag();}if(e.key==='Tab'){const buttons=[...bagVeil.querySelectorAll('button:not(:disabled)')];if(!buttons.includes(document.activeElement)||e.shiftKey&&document.activeElement===buttons[0]||!e.shiftKey&&document.activeElement===buttons.at(-1)){e.preventDefault();(e.shiftKey?buttons.at(-1):buttons[0]).focus();}}});
+  bagList.addEventListener('click',e=>{
+    const button=e.target.closest('[data-bag-use]');if(!button)return;
+    const action=button.dataset.bagUse;
+    if(action==='rose'||action==='moon'||action==='plain'){
+      const goods=shopState();goods.equipped=action;saveShop(goods);renderBag();document.getElementById('bagNotice').textContent='Đã đổi khung avatar ✧';playSound('star');return;
+    }
+    if((action==='feed'||action==='play')&&!petState().owned.length){document.getElementById('bagNotice').textContent='Chưa có bé mèo nào trong cottage. Ghé đồng cỏ đón bé trước nhé.';return;}
+    pendingBagStation=action==='feed'||action==='play'?action:'';
+    closeBag();travel(action==='lake'?'fishDeck':'rightExit');
+  });
   const shopVeil=document.getElementById('shopVeil'),shopList=document.getElementById('shopList');let shopFocus=null;
   function shopNotice(message){document.getElementById('shopNotice').textContent=message;}
   function renderShop(){
@@ -385,7 +476,8 @@
       const fixed=p.id==='rod'&&state.rod||p.id==='toy'&&state.toy;
       const button=equipped?'Đang dùng':owned?'Trang bị':fixed?'Đã có':p.price+' ✿';
       const detail=p.id==='pate'?p.detail+' Trong túi: '+state.pate:p.detail;
-      const icon=p.id.startsWith('fish-')?'<i class="shop-icon shop-fish fish-mini fish-'+p.id.slice(5)+'" aria-hidden="true"></i>':'<span class="shop-icon '+(frame?'frame-'+frame:'')+'" aria-hidden="true">'+p.icon+'</span>';
+      const art={rod:'moon-rod',pate:'pate-tin',toy:'violet-yarn','frame-rose':'rose-frame','frame-moon':'moon-frame'}[p.id];
+      const icon=art?'<img class="shop-icon shop-item-art" src="assets/'+art+'.webp" alt="">':p.id.startsWith('fish-')?'<i class="shop-icon shop-fish fish-mini fish-'+p.id.slice(5)+'" aria-hidden="true"></i>':'<span class="shop-icon '+(frame?'frame-'+frame:'')+'" aria-hidden="true">'+p.icon+'</span>';
       return '<article class="shop-item">'+icon+'<div class="shop-item-copy"><strong>'+p.name+'</strong><small>'+detail+'</small></div><button class="shop-buy'+(owned&&!equipped?' equip':'')+'" type="button" data-shop-buy="'+p.id+'"'+(equipped||fixed?' disabled':'')+'>'+button+'</button>'+(p.id==='rename'?'<div class="shop-rename" id="shopRename"'+(!renameOpen?' hidden':'')+'><input id="shopNameInput" maxlength="32" aria-label="Tên vườn mới" placeholder="Tên vườn mới"><button type="button" data-shop-save-name>Lưu · 20 ✿</button></div>':'')+'</article>';
     }).join('');
   }
@@ -436,7 +528,7 @@
     return fishMemory;
   }
   function todayFish(state){if(state.lastDay!==gardenDay()){state.lastDay=gardenDay();state.usedToday=0;}return state;}
-  function saveFish(state){fishMemory=state;try{localStorage.setItem(fishStorageKey,JSON.stringify(state));}catch(_error){}}
+  function saveFish(state){fishMemory=state;try{localStorage.setItem(fishStorageKey,JSON.stringify(state));}catch(_error){}notifyParentSync('fish',state);}
   function petState(){
     try{
       const saved=JSON.parse(localStorage.getItem(petStorageKey));
@@ -452,7 +544,7 @@
     }catch(_error){}
     return petMemory;
   }
-  function savePets(state){petMemory=state;try{localStorage.setItem(petStorageKey,JSON.stringify(state));}catch(_error){}}
+  function savePets(state){petMemory=state;try{localStorage.setItem(petStorageKey,JSON.stringify(state));}catch(_error){}notifyParentSync('pet',state);}
   function getPetRoster(){return petState();}
   const careCooldown={feed:3,water:2,play:1,sleep:6};
   function needsFor(state,id){
@@ -587,15 +679,17 @@
     const actionText={feed:'Cho '+pet.name+' ăn',water:'Cho '+pet.name+' uống nước',play:'Chơi cùng '+pet.name,sleep:'Cho '+pet.name+' nghỉ'}[cottageStation];
     if(cottageStation==='feed'){
       const inventory=fishState(),pate=shopState().pate;
-      careGrid.innerHTML='<p class="fish-choice-label">Chọn một món cho '+pet.name+' · giỏ có '+fishTotal(inventory)+' cá</p><div class="feed-fishes">'+fishKinds.map(f=>'<button type="button" data-feed-fish="'+f.id+'"'+(!readiness.ready||!inventory.counts[f.id]?' disabled':'')+'><i class="fish-mini fish-'+f.id+'" aria-hidden="true"></i><span>'+f.name+'<small>Vui +'+f.joy+(f.reward?' · có thể +1 ✿':'')+'</small></span><b>×'+(inventory.counts[f.id]||0)+'</b></button>').join('')+'<button type="button" data-feed-pate'+(!readiness.ready||!pate?' disabled':'')+'><i class="fish-mini pate-mini" aria-hidden="true">♡</i><span>Pate cá<small>Vui +3 · mua trong tiệm</small></span><b>×'+pate+'</b></button></div>';
-    }else careGrid.innerHTML='<button type="button" data-care="'+cottageStation+'"'+(!readiness.ready?' disabled':'')+'>'+actionText+'<small>'+(!readiness.ready?readiness.reason:cottageStation==='play'&&shopState().toy?'Bóng len · vui thêm +2':'Chạm để chăm bé')+'</small></button>';
+      careGrid.innerHTML='<p class="fish-choice-label">Chọn một món cho '+pet.name+' · giỏ có '+fishTotal(inventory)+' cá</p><div class="feed-fishes">'+fishKinds.map(f=>'<button type="button" data-feed-fish="'+f.id+'"'+(!readiness.ready||!inventory.counts[f.id]?' disabled':'')+'><i class="fish-mini fish-'+f.id+'" aria-hidden="true"></i><span>'+f.name+'<small>Vui +'+f.joy+(f.reward?' · có thể +1 ✿':'')+'</small></span><b>×'+(inventory.counts[f.id]||0)+'</b></button>').join('')+'<button type="button" data-feed-pate'+(!readiness.ready||!pate?' disabled':'')+'><img class="care-item-art" src="assets/pate-tin.webp" alt=""><span>Pate cá thơm<small>Vui +3 · mua trong tiệm</small></span><b>×'+pate+'</b></button></div>';
+    }else if(cottageStation==='play'){
+      careGrid.innerHTML='<p class="fish-choice-label">Chọn cách chơi với '+pet.name+'</p><div class="play-choices"><button type="button" data-care="play" data-toy="none"'+(!readiness.ready?' disabled':'')+'><span class="play-hand" aria-hidden="true">♡</span><span>Chơi cùng bé<small>Không cần đồ chơi</small></span></button><button type="button" data-care="play" data-toy="yarn"'+(!readiness.ready||!shopState().toy?' disabled':'')+'><img src="assets/violet-yarn.webp" alt=""><span>Bóng len tím<small>'+(shopState().toy?'Vui thêm +2 · không tiêu hao':'Mua ở tiệm nhỏ')+'</small></span></button></div>';
+    }else careGrid.innerHTML='<button type="button" data-care="'+cottageStation+'"'+(!readiness.ready?' disabled':'')+'>'+actionText+'<small>'+(!readiness.ready?readiness.reason:'Chạm để chăm bé')+'</small></button>';
     document.getElementById('cottageNotice').textContent=readiness.reason||mood.line;
   }
   function openActivity(veil){
     activityFocus=document.activeElement;
     if(veil===fishVeil)renderFish();
     if(veil===petVeil)renderPetGrid();
-    if(veil===cottageVeil){cottageStation='';renderCottage();const state=petState();if(state.owned.some(id=>petMood(needsFor(state,id),id).className!=='happy'))playMeow();}
+    if(veil===cottageVeil){cottageStation=pendingBagStation;pendingBagStation='';renderCottage();const state=petState();if(state.owned.some(id=>petMood(needsFor(state,id),id).className!=='happy'))playMeow();}
     veil.classList.add('open');veil.setAttribute('aria-hidden','false');
     veil.querySelector('.activity-sheet').focus({preventScroll:true});
   }
@@ -721,13 +815,14 @@
       gained=Math.random()<used.reward;
       if(gained){const flowers=flowerState();saveFlower({...flowers,petals:flowers.petals+1});}
     }
-    if(action==='play'&&shopState().toy)needs.happiness=Math.min(20,Math.max(0,Number(needs.happiness)||0)+2);
+    const usedYarn=action==='play'&&button.dataset.toy==='yarn'&&shopState().toy;
+    if(usedYarn)needs.happiness=Math.min(20,Math.max(0,Number(needs.happiness)||0)+2);
     needs[action]=Date.now();state.needs[id]=needs;savePets(state);renderCottage();
     setPetPose(id,action);cottagePet.hidden=false;
     petPoseTimer=setTimeout(()=>{cottagePet.hidden=true;},3000);
     if(action==='play')playSound('star');else playSound(action==='water'?'water':'open');
     const pet=petKinds.find(p=>p.id===id);
-    document.getElementById('cottageNotice').textContent=action==='feed'?pet.name+' ăn '+used.name+' rồi · vui +'+used.joy+(gained?' · nhặt được 1 ✿!':' ♡'):{water:pet.name+' vừa uống nước sạch ♡',play:pet.name+' chơi vui rồi ♡',sleep:pet.name+' cuộn tròn nghỉ trên giường ♡'}[action];
+    document.getElementById('cottageNotice').textContent=action==='feed'?pet.name+' ăn '+used.name+' rồi · vui +'+used.joy+(gained?' · nhặt được 1 ✿!':' ♡'):{water:pet.name+' vừa uống nước sạch ♡',play:pet.name+(usedYarn?' chơi với bóng len tím · vui thêm +2 ♡':' chơi vui rồi ♡'),sleep:pet.name+' cuộn tròn nghỉ trên giường ♡'}[action];
   });
   setInterval(()=>{if(cottageVeil.classList.contains('open')&&!cottageStation)renderCottage();},60000);
   document.getElementById('cottageFind').addEventListener('click',()=>{closeActivity(cottageVeil);travel('westExit');});
@@ -1014,7 +1109,7 @@
   });
   if(new URLSearchParams(location.search).has('debug'))stage.classList.add('debug-tools');
   drawRoutes();arrive('entry');
-  player=readPlayer();renderPlayer();applyShopFrame();renderOnboardSprites();updateEnvironment();requestAnimationFrame(drawWeather);setInterval(updateEnvironment,60000);
+  player=readPlayer();updateGardenSceneTitle(player?.gardenName);renderPlayer();applyShopFrame();renderOnboardSprites();updateEnvironment();requestAnimationFrame(drawWeather);setInterval(updateEnvironment,60000);
   if(player){document.getElementById('gardenName').value=player.gardenName;onboardForm.querySelector('input[value="'+player.gender+'"]').checked=true;}
   if(!player||new URLSearchParams(location.search).has('onboard')){onboardVeil.classList.add('open');onboardVeil.setAttribute('aria-hidden','false');}
 })();

@@ -2,6 +2,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { UserAuthProvider } from './lib/userAuth';
 
 // Polyfill global for libraries that expect it
 if (typeof (window as any).global === 'undefined') {
@@ -10,6 +11,8 @@ if (typeof (window as any).global === 'undefined') {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <UserAuthProvider>
+      <App />
+    </UserAuthProvider>
   </StrictMode>,
 );
