@@ -1,0 +1,126 @@
+--- a/public/garden/index.html
++++ b/public/garden/index.html
+@@ -178,8 +178,8 @@
+           <p class="star-description" id="starDescription">Chạm để xem bầu trời giữ lại điều gì cho em.</p>
+           <div class="star-divider"><span>✦</span></div>
+           <p class="star-found" id="starFound" aria-live="polite"></p>
+-          <button class="star-watch" id="starWatch" type="button"><span class="star-watch-icon" aria-hidden="true">✦</span><span id="starButtonText">Ngắm sao đêm nay</span><span class="star-reward">+1 ✦</span></button>
+-          <p class="star-footnote" id="starFootnote" aria-live="polite">Ngôi sao này sẽ ở lại trong túi em</p>
++          <button class="star-watch" id="starWatch" type="button"><span class="star-watch-icon" aria-hidden="true">✦</span><span id="starButtonText">Ngắm sao đêm nay</span><span class="star-reward">+5 ✿</span></button>
++          <p class="star-footnote" id="starFootnote" aria-live="polite">Ngắm sao nhận 5 cánh hoa ✿</p>
+           <p class="star-total">EM ĐÃ GIỮ <span id="starTotal">0</span> NGÔI SAO ✧</p>
+         </div>
+       </div>
+@@ -198,7 +198,7 @@
+           <div class="activity-rule"></div>
+           <p class="inventory-heading">CÁ TRONG GIỎ <span id="fishCount">0</span></p>
+           <div class="fish-inventory" id="fishInventory"></div>
+-          <p class="activity-footnote">Cá câu được có thể đem về cho pet ăn.</p>
++          <p class="activity-footnote">Giữ cá để cho pet ăn, hoặc bán từng con lấy hoa.</p>
+         </div>
+       </div>
+     </section>
+@@ -209,7 +209,7 @@
+         <div class="activity-copy">
+           <div class="activity-kicker">✧ &nbsp; ĐỒNG CỎ TRONG VƯỜN &nbsp; ✧</div>
+           <h2 id="petTitle">Gặp <em>những bé mèo.</em></h2>
+-          <p class="activity-description">Tích cánh hoa từ nhà kính để đưa một bé về cottage.</p>
++          <p class="activity-description">Chăm hoa, ngắm sao và câu cá để dành hoa đón các bé về cottage.</p>
+           <p class="pet-balance">Cánh hoa em có <strong id="petPetals">0</strong> ✿</p>
+           <div class="pet-grid" id="petGrid"></div>
+           <p class="activity-footnote" id="petNotice" aria-live="polite">Chạm vào một bé để xem hồ sơ và nhận nuôi.</p>
+--- a/public/garden/styles.css
++++ b/public/garden/styles.css
+@@ -175,6 +175,7 @@
+ .activity-rule{height:1px;margin:16px 0 11px;background:linear-gradient(90deg,transparent,#d2bc9f8b,transparent)}
+ .inventory-heading{display:flex;justify-content:space-between;margin:0 0 8px;color:#c8c4b7;font:8px/1.4 system-ui,sans-serif;letter-spacing:.18em}.inventory-heading span{color:#f6e3bb;font-size:11px}
+ .fish-inventory{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;min-height:28px}.fish-token{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border:1px solid #bdc2aa78;border-radius:999px;background:#d4d5b012;color:#eee8d5;font-size:10px;white-space:nowrap}.fish-token b{color:#f4dcae;font-weight:400}
++.fish-token small{color:#c7b9bd;font-size:9px}.fish-token button{border:0;border-left:1px solid #ead6ac70;padding:1px 0 1px 7px;background:transparent;color:#f5d9a4;font:10px/1.2 "Garden Serif",serif;cursor:pointer}.fish-token button:hover,.fish-token button:focus-visible{color:#fff4d9;text-decoration:underline}
+ .fish-mini{position:relative;display:inline-block;width:14px;height:8px;border-radius:60% 40% 40% 60%;background:var(--fish-color);box-shadow:0 0 5px var(--fish-color)}.fish-mini::after{content:"";position:absolute;right:-5px;top:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:6px solid var(--fish-color)}
+ .activity-footnote{min-height:12px;margin:12px 0 0;color:#bdb1ab;font:9px/1.4 system-ui,sans-serif}
+ .pet-balance{margin:4px 0 13px;color:#ddc6b1;font:10px/1.3 system-ui,sans-serif;letter-spacing:.04em}.pet-balance strong{font:19px/1 "Garden Serif",serif;color:#f6e3b7}
+--- a/public/garden/game.js
++++ b/public/garden/game.js
+@@ -310,7 +310,7 @@
+     }
+     starWatch.disabled=done;
+     document.getElementById('starButtonText').textContent=done?'Đã ngắm sao hôm nay':'Ngắm sao đêm nay';
+-    document.getElementById('starFootnote').textContent=done?'Sao vẫn ở đây, hẹn em một đêm khác ♡':'Ngôi sao này sẽ ở lại trong túi em';
++    document.getElementById('starFootnote').textContent=done?'Sao vẫn ở đây, hẹn em một đêm khác ♡':'Ngắm sao nhận 5 cánh hoa ✿';
+     document.getElementById('starTotal').textContent=state.total;
+   }
+   function openStars(){
+@@ -327,9 +327,10 @@
+     if(old.last===today)return;
+     const shape=Math.floor(Math.random()*constellations.length);
+     saveStars({last:today,total:old.total+1,shape});
++    const flowers=flowerState();saveFlower({...flowers,petals:flowers.petals+5});
+     starSheet.classList.remove('revealed');renderStars();
+     playSound('star');
+-    status.innerHTML='<strong>Đã ngắm sao đêm nay</strong><span>+1 ngôi sao ✦ · tổng '+(old.total+1)+' ngôi sao.</span>';
++    status.innerHTML='<strong>Đã ngắm sao đêm nay</strong><span>+1 ngôi sao ✦ · +5 cánh hoa ✿</span>';
+   });
+   starClose.addEventListener('click',()=>{playSound();closeStars();});
+   starVeil.addEventListener('click',e=>{e.stopPropagation();if(e.target===starVeil)closeStars();});
+@@ -345,15 +346,17 @@
+   const petKinds=[
+     {id:'tan-dich-tham',name:'Tần Dịch Thâm',tag:'kiêu kỳ · nơ đen',cost:80},
+     {id:'luc-hoai-can',name:'Lục Hoài Cẩn',tag:'điềm tĩnh · quyển sách',cost:80},
+-    {id:'chu-du-an',name:'Chu Dự An',tag:'mê game · tai nghe',cost:80}
++    {id:'chu-du-an',name:'Chu Dự An',tag:'mê game · tai nghe',cost:80},
++    {id:'co-da',name:'Cố Dã',tag:'mèo rừng · hơi cáu',cost:80},
++    {id:'ta-hoai-chau',name:'Tạ Hoài Châu',tag:'Ragdoll · mắt xanh',cost:80}
+   ];
+   const fishKinds=[
+-    {id:'silver',name:'Cá bạc',weight:44,joy:1,reward:0},
+-    {id:'gold',name:'Cá vàng',weight:26,joy:2,reward:0},
+-    {id:'koi',name:'Cá koi hoa',weight:16,joy:3,reward:0},
+-    {id:'pearl',name:'Cá ngọc trai',weight:8,joy:4,reward:.15},
+-    {id:'moon',name:'Cá ánh trăng',weight:4,joy:5,reward:.25},
+-    {id:'star',name:'Cá đuôi sao',weight:2,joy:6,reward:.4}
++    {id:'silver',name:'Cá bạc',weight:44,joy:1,reward:0,rarity:'Thường',sellPrice:5},
++    {id:'gold',name:'Cá vàng',weight:26,joy:2,reward:0,rarity:'Thường',sellPrice:5},
++    {id:'koi',name:'Cá koi hoa',weight:16,joy:3,reward:0,rarity:'Thường',sellPrice:5},
++    {id:'pearl',name:'Cá ngọc trai',weight:8,joy:4,reward:.15,rarity:'Hiếm',sellPrice:10},
++    {id:'moon',name:'Cá ánh trăng',weight:4,joy:5,reward:.25,rarity:'Hiếm',sellPrice:10},
++    {id:'star',name:'Cá đuôi sao',weight:2,joy:6,reward:.4,rarity:'Cực hiếm',sellPrice:15}
+   ];
+   const shopStorageKey='mong-mien-garden:release:v1:shop:'+accountId;
+   let shopMemory={rod:false,pate:0,toy:false,frames:[],equipped:'plain'},shopTab='profile',renameOpen=false;
+@@ -552,7 +555,7 @@
+     document.getElementById('fishCount').textContent=fishTotal(state);
+     const caught=fishKinds.filter(f=>state.counts[f.id]>0);
+     document.getElementById('fishInventory').innerHTML=caught.length
+-      ?caught.map(f=>'<span class="fish-token"><i class="fish-mini fish-'+f.id+'" aria-hidden="true"></i>'+f.name+' <b>×'+state.counts[f.id]+'</b></span>').join('')
++      ?caught.map(f=>'<span class="fish-token"><i class="fish-mini fish-'+f.id+'" aria-hidden="true"></i><span>'+f.name+' <small>· '+f.rarity+'</small></span> <b>×'+state.counts[f.id]+'</b><button type="button" data-sell-fish="'+f.id+'" aria-label="Bán một '+f.name+' lấy '+f.sellPrice+' cánh hoa">Bán 1 · +'+f.sellPrice+' ✿</button></span>').join('')
+       :'<span class="fish-token">Giỏ còn trống · thử thả câu nhé</span>';
+   }
+   function renderPetGrid(){
+@@ -568,7 +571,9 @@
+     const habits={
+       'tan-dich-tham':['Thức muộn, thích nằm cuộn trong chăn nhung.','Cá mềm và một bát nước mát.','Vờ kiêu kỳ nhưng thích vờn dây nơ đen.'],
+       'luc-hoai-can':['Ngủ sớm cạnh chồng sách.','Ăn chậm và thường tự đến bát nước.','Biết làm toán bằng cách đẩy đúng ba hạt đậu.'],
+-      'chu-du-an':['Hay ngủ trưa, tối lại tỉnh như sáo.','Cá và nước trong chiếc bát ngôi sao.','Mê bộ điều khiển màu tím và bóng len.']
++      'chu-du-an':['Hay ngủ trưa, tối lại tỉnh như sáo.','Cá và nước trong chiếc bát ngôi sao.','Mê bộ điều khiển màu tím và bóng len.'],
++      'co-da':['Hay thức muộn và cuộn đuôi khi ngủ.','Thích cá bạc, không thích bị giành bát.','Vờ cáu khi em chọc, rồi lại đuổi theo dải khăn.'],
++      'ta-hoai-chau':['Thích chọn một chỗ êm rồi nằm thật lâu.','Ăn chậm, thích bát nước sạch.','Chơi khi có hứng, còn lại sẽ nhìn em đầy kiêu kỳ.']
+     };
+     const play=petPlayAsset(id),owned=petState().owned.includes(id),missing=Math.max(0,pet.cost-flowerState().petals);
+     detail.innerHTML='<button class="pet-profile-close" type="button" data-hide-detail aria-label="Đóng hồ sơ">×</button><h3>'+pet.name+'</h3><p class="pet-profile-tag">'+pet.tag+'</p><div class="pet-poses"><figure><img src="'+petStateAsset(id,'sleep')+'" alt="'+pet.name+' đang ngủ"><figcaption>Ngủ</figcaption></figure><figure><img src="'+petStateAsset(id,'feed')+'" alt="'+pet.name+' đang ăn"><figcaption>Ăn</figcaption></figure><figure><img src="'+petStateAsset(id,'water')+'" alt="'+pet.name+' đang uống"><figcaption>Uống</figcaption></figure><figure><img src="'+play+'" alt="'+pet.name+' đang chơi"><figcaption>Chơi</figcaption></figure></div><div class="pet-profile-notes">'+habits[id].map(t=>'<p>✧ '+t+'</p>').join('')+'</div><p class="pet-profile-price">'+(owned?'Bé đã có một mái nhà':missing?'Còn thiếu '+missing+' ✿ để đón bé':'Đã đủ 80 ✿ để đón bé')+'</p>';
+@@ -693,6 +698,16 @@
+     saveFlower({...flowers,petals:flowers.petals+gained});renderFish();playSound('open');
+     document.getElementById('fishMessage').textContent='Đã bán rong, nhận '+gained+' cánh hoa ✿';
+   });
++  document.getElementById('fishInventory').addEventListener('click',event=>{
++    const button=event.target.closest('[data-sell-fish]');if(!button)return;
++    const fish=fishKinds.find(f=>f.id===button.dataset.sellFish),state=fishState();
++    if(!fish||!Number.isSafeInteger(state.counts[fish.id])||state.counts[fish.id]<1)return;
++    state.counts[fish.id]--;
++    const flowers=flowerState();
++    saveFish(state);saveFlower({...flowers,petals:flowers.petals+fish.sellPrice});
++    renderFish();playSound('open');
++    document.getElementById('fishMessage').textContent='Đã bán 1 '+fish.name+', nhận '+fish.sellPrice+' cánh hoa ✿';
++  });
+   function adoptPet(id){
+     const pet=petKinds.find(p=>p.id===id),flowers=flowerState();if(!pet)return;
+     if(flowers.petals<pet.cost){
